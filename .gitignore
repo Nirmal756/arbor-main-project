@@ -1,0 +1,14 @@
+*.pem
+*.ppk
+terraform.tfvars
+secrets.tfvars
+
+terraform-files/
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+
+.env
+.env.local
+.env.*.local
