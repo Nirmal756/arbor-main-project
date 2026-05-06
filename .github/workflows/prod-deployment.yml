@@ -27,27 +27,30 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Create .env.prod from GitHub Secrets
+        run: |
+          echo "${{ secrets.ENV_PROD }}" > .env.prod
+          chmod 600 .env.prod
+
       - name: Deploy to Prod via Docker Compose
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: nirmal/react-app
           IMAGE_TAG: latest
         run: |
-          aws ecr get-login-password --region ap-south-1 | sudo docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+          docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
 
-          sudo docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+          ECR_REGISTRY=${{ env.ECR_REGISTRY }} \
+          ECR_REPOSITORY=${{ env.ECR_REPOSITORY }} \
+          IMAGE_TAG=${{ env.IMAGE_TAG }} \
+          docker compose -f docker-compose.prod.yml down --remove-orphans || true
 
-          sudo ECR_REGISTRY=${{ env.ECR_REGISTRY }} \
-               ECR_REPOSITORY=${{ env.ECR_REPOSITORY }} \
-               IMAGE_TAG=${{ env.IMAGE_TAG }} \
-               docker compose -f docker-compose.prod.yml down --remove-orphans || true
+          docker image prune -f
 
-          sudo docker image prune -f
+          ECR_REGISTRY=${{ env.ECR_REGISTRY }} \
+          ECR_REPOSITORY=${{ env.ECR_REPOSITORY }} \
+          IMAGE_TAG=${{ env.IMAGE_TAG }} \
+          docker compose -f docker-compose.prod.yml up -d
 
-          sudo ECR_REGISTRY=${{ env.ECR_REGISTRY }} \
-               ECR_REPOSITORY=${{ env.ECR_REPOSITORY }} \
-               IMAGE_TAG=${{ env.IMAGE_TAG }} \
-               docker compose -f docker-compose.prod.yml up -d
-
-          sleep 5
-          sudo docker logs --tail 20 $(sudo docker ps -q --filter name=web)
+          sleep 10
+          docker logs --tail 50 $(docker ps -q --filter name=web)
