@@ -1,98 +1,187 @@
-React Enterprise Deployment Pipeline
+# React Enterprise: Generic ECR Deployment Pipeline
 
-Generic Build & Runtime Environment Injection
+This project implements a **Build-Once, Deploy-Anywhere** CI/CD strategy. The React application is not pre-compiled during the CI process; instead, it is built **inside the container at runtime** on the target EC2 instance. This allows a single image from ECR to serve different environments based on the local `.env` file provided via Docker Compose.
 
-1. Project Overview
-This project implements a robust, "Build-Once, Deploy-Anywhere" CI/CD pipeline for a
-React application. The core innovation is a Late-Binding Runtime Strategy. This allows a
-single, generic Docker image to be used for both Development and Production
-environments, injecting specific configurations only when the container starts on the
-target AWS EC2 instance.
-Core Tech Stack
-Frontend: React.js
-CI/CD: GitHub Actions + Self-Hosted Runners (on EC2)
-Registry: Amazon Elastic Container Registry (ECR)
-Orchestration: Docker Compose
-Web Server: Nginx (Alpine-based)
+---
 
-2. Key Challenges Solved
-Permission Denied (EACCES): Fixed by implementing a mandatory workspace
-cleanup step in GitHub Actions to handle files created by sudo .
-Baking vs. Injection: Solved the issue where React env variables were hard-coded
-during build. We moved npm run build into the container's startup script.
-Memory Crashes (t2.micro): Resolved "Restarting (255)" errors by implementing
-Linux Swap space to handle memory-heavy React builds.
-Port Conflicts: Resolved "Address already in use" by disabling host-level Nginx
-services.
-•
-•
-•
-•
-•
+## 🚀 Key Features
+- **Generic Images**: ECR images contain source code/dependencies but no hardcoded variables.
+- **Late-Binding Env**: Environment variables are injected from the EC2 host at startup.
+- **Nginx Integration**: Automated serving of build assets via internal Nginx.
+- **Permission Fix**: Automated GitHub Runner workspace cleanup to handle `sudo` file locks.
 
-•
+---
 
-•
+## 🏗 System Architecture
 
-•
 
-•
 
-3. Environment Setup
-AWS Infrastructure
-Create a repository named nirmal/react-app in ECR. Set up two Ubuntu EC2 instances
-with GitHub Self-hosted runners. Ensure Security Groups allow inbound traffic on Port 80.
+1. **GitHub Actions**: Cleans workspace, builds a generic image (raw code + node_modules), and pushes to ECR.
+2. **EC2 Deployment**: Docker Compose pulls the image and injects a local `.env.dev` (Dev) or `.env.prod` (Prod).
+3. **Runtime Build**: Upon container start, the entrypoint script executes `npm run build` using that specific instance's variables.
+4. **Nginx**: Static assets are moved to the web directory and served immediately.
 
-Mandatory for t2.micro: Add Swap Space
-Building React requires ~1GB+ RAM. Run these commands on your EC2 instances:
-sudo dd if=/dev/zero of=/swapfile bs=128M count=16
-sudo mkswap /swapfile && sudo swapon /swapfile
+---
+## Port Configuration
 
-Local Configuration
-Create environment files locally on each EC2 instance in the project directory:
-Dev Instance: .env.dev
-Prod Instance: .env.prod
+sudo systemctl stop nginx && sudo systemctl disable nginx
 
-4. Deployment Workflow
-Phase 1: Development (Branch: dev)
-1. Push to dev. 2. Generic Image built and pushed to ECR. 3. docker-compose.dev.yml
-pulls image and injects .env.dev .
-Phase 2: Production (Branch: main)
+📄 Core Implementation Files
 
-1. Merge to main. 2. GitHub pulls existing latest image from ECR. 3. docker-
-compose.prod.yml injects .env.prod and triggers runtime build.
-
-5. Technical Implementation
-The Generic Dockerfile
-•
-•
+Dockerfile(Runtime Build Logic)
 
 FROM node:18-alpine
+
+# Install Nginx
 RUN apk add --no-cache nginx
+
 WORKDIR /app
 
-6. Troubleshooting Guide
-
-Symptom Diagnosis Solution
-Permission
-denied
-
-Root-owned files in
-workspace
-
-sudo rm -rf ${{
-github.workspace }}/*
-Restarting (255) Out of Memory (OOM) Add Swap Space (1-2GB)
-Port in use Host Nginx conflict sudo systemctl stop nginx
-
-Note: After deployment, monitor the build via sudo docker logs -f [container_id] .
-The site will be live once the internal "npm run build" completes.
+# Install dependencies (Baked into image for speed)
 COPY package*.json ./
 RUN npm install
+
+# Copy raw source code
 COPY . .
+
+# Copy Nginx configuration for Alpine
 COPY nginx/default.conf /etc/nginx/http.d/default.conf
-RUN printf "#!/bin/sh\nset -e\nnpm run build\nmkdir -p /usr/share/nginx/
-html\ncp -r build/* /usr/share/nginx/html/\nnginx -g \"daemon off;\"" > /
-entrypoint.sh
+
+# Entrypoint script: Runs on the EC2 at container startup
+RUN printf "#!/bin/sh\n\
+set -e\n\
+echo '--- STARTING REACT BUILD ---'\n\
+npm run build\n\
+echo '--- BUILD FINISHED ---'\n\
+mkdir -p /usr/share/nginx/html\n\
+cp -r build/* /usr/share/nginx/html/\n\
+echo '--- STARTING NGINX ---'\n\
+nginx -g \"daemon off;\"" > /entrypoint.sh
+
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
+
+
+
+
+Docker Compose Configuration
+
+
+
+version: '3.8'
+services:
+  web:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+    env_file:
+      - .env.dev  # Change to .env.prod on the Production instance
+    ports:
+      - "80:80"
+    restart: always
+
+
+
+
+Here is the complete, consolidated project guide. You can copy this entire block and save it as README.md in your project root. It includes the architecture, the specific Dockerfile logic we used, the AWS fixes, and the workflow steps.
+
+Markdown
+# React Enterprise: Generic ECR Deployment Pipeline
+
+This project implements a **Build-Once, Deploy-Anywhere** CI/CD strategy. The React application is not pre-compiled during the CI process; instead, it is built **inside the container at runtime** on the target EC2 instance. This allows a single image from ECR to serve different environments based on the local `.env` file provided via Docker Compose.
+
+---
+
+## 🚀 Key Features
+- **Generic Images**: ECR images contain source code/dependencies but no hardcoded variables.
+- **Late-Binding Env**: Environment variables are injected from the EC2 host at startup.
+- **Nginx Integration**: Automated serving of build assets via internal Nginx.
+- **Permission Fix**: Automated GitHub Runner workspace cleanup to handle `sudo` file locks.
+
+---
+
+## 🏗 System Architecture
+
+
+
+1. **GitHub Actions**: Cleans workspace, builds a generic image (raw code + node_modules), and pushes to ECR.
+2. **EC2 Deployment**: Docker Compose pulls the image and injects a local `.env.dev` (Dev) or `.env.prod` (Prod).
+3. **Runtime Build**: Upon container start, the entrypoint script executes `npm run build` using that specific instance's variables.
+4. **Nginx**: Static assets are moved to the web directory and served immediately.
+
+---
+
+## 🛠 Prerequisites (EC2 Setup)
+
+### 1. Memory Optimization (Mandatory for t2.micro)
+React builds are memory-intensive. On 1GB RAM instances, you **must** add Swap space to prevent `Exit 137` (Out of Memory) crashes:
+```bash
+sudo dd if=/dev/zero of=/swapfile bs=128M count=16
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile swap swap defaults 0 0' | sudo tee -a /etc/fstab
+2. Port Configuration
+Disable host-level Nginx to allow Docker to bind to Port 80:
+
+Bash
+sudo systemctl stop nginx && sudo systemctl disable nginx
+📄 Core Implementation Files
+Dockerfile (Runtime Build Logic)
+Dockerfile
+FROM node:18-alpine
+
+# Install Nginx
+RUN apk add --no-cache nginx
+
+WORKDIR /app
+
+# Install dependencies (Baked into image for speed)
+COPY package*.json ./
+RUN npm install
+
+# Copy raw source code
+COPY . .
+
+# Copy Nginx configuration for Alpine
+COPY nginx/default.conf /etc/nginx/http.d/default.conf
+
+# Entrypoint script: Runs on the EC2 at container startup
+RUN printf "#!/bin/sh\n\
+set -e\n\
+echo '--- STARTING REACT BUILD ---'\n\
+npm run build\n\
+echo '--- BUILD FINISHED ---'\n\
+mkdir -p /usr/share/nginx/html\n\
+cp -r build/* /usr/share/nginx/html/\n\
+echo '--- STARTING NGINX ---'\n\
+nginx -g \"daemon off;\"" > /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+Docker Compose Configuration
+YAML
+version: '3.8'
+services:
+  web:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+    env_file:
+      - .env.dev  # Change to .env.prod on the Production instance
+    ports:
+      - "80:80"
+    restart: always
+
+
+
+🚀 Deployment Workflow
+
+
+1: Push to Dev: A generic image is built and pushed to ECR. Dev EC2 pulls it and builds the app using the local .env.dev.
+
+2: Merge to Main: The exact same image is pulled on the Prod EC2 and builds the app using the local .env.prod.
+
+
+Verification
+
+
+Since the build happens after the container starts, the site will not be live immediately. It usually takes 60-90 seconds to compile. Monitor progress via:
+
+sudo docker logs -f <container_name>
