@@ -111,15 +111,7 @@ This project implements a **Build-Once, Deploy-Anywhere** CI/CD strategy. The Re
 
 ## 🛠 Prerequisites (EC2 Setup)
 
-### 1. Memory Optimization (Mandatory for t2.micro)
-React builds are memory-intensive. On 1GB RAM instances, you **must** add Swap space to prevent `Exit 137` (Out of Memory) crashes:
-```bash
-sudo dd if=/dev/zero of=/swapfile bs=128M count=16
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo '/swapfile swap swap defaults 0 0' | sudo tee -a /etc/fstab
-2. Port Configuration
+1. Port Configuration
 Disable host-level Nginx to allow Docker to bind to Port 80:
 
 Bash
