@@ -3,7 +3,7 @@ services:
   web:
     image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
     ports:
-      - "80:80"
+      - "8040:80"
     env_file:
       - .env.dev
     restart: always
