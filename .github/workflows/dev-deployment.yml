@@ -8,7 +8,6 @@ jobs:
   build-and-push:
     runs-on: [self-hosted, dev-runner]
     steps:
-      # 1. Clear workspace to avoid 'Permission Denied' from previous sudo runs
       - name: Cleanup Workspace
         run: |
           sudo rm -rf ${{ github.workspace }}/*
@@ -34,14 +33,11 @@ jobs:
           ECR_REPOSITORY: nirmal/react-app
           IMAGE_TAG: latest
         run: |
-          # Manual Login for Sudo session
           aws ecr get-login-password --region ap-south-1 | sudo docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
 
-          # Build Generic Image (Removed the --build-arg as requested)
           sudo docker build \
             -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} .
 
-          # Push to ECR
           sudo docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
 
   deploy-dev:
@@ -73,19 +69,15 @@ jobs:
           ECR_REPOSITORY: nirmal/react-app
           IMAGE_TAG: latest
         run: |
-          # 1. Login Docker to ECR
           aws ecr get-login-password --region ap-south-1 | sudo docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
 
-          # 2. Stop Host Nginx to free up port 80 (if needed)
           sudo systemctl stop nginx || true
 
-          # 3. Down (Injecting variables for Docker Compose)
           sudo ECR_REGISTRY=${{ env.ECR_REGISTRY }} \
                ECR_REPOSITORY=${{ env.ECR_REPOSITORY }} \
                IMAGE_TAG=${{ env.IMAGE_TAG }} \
                docker compose -f docker-compose.dev.yml down || true
 
-          # 4. Up
           sudo ECR_REGISTRY=${{ env.ECR_REGISTRY }} \
                ECR_REPOSITORY=${{ env.ECR_REPOSITORY }} \
                IMAGE_TAG=${{ env.IMAGE_TAG }} \

@@ -1,0 +1,53 @@
+name: Prod Deployment
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy-prod:
+    runs-on: [self-hosted, prod-runner]
+    steps:
+      - name: Cleanup Workspace
+        run: |
+          sudo rm -rf ${{ github.workspace }}/*
+          sudo rm -rf ${{ github.workspace }}/.* || true
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Deploy to Prod via Docker Compose
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: nirmal/react-app
+          IMAGE_TAG: latest
+        run: |
+          aws ecr get-login-password --region ap-south-1 | sudo docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+
+          sudo docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+
+          sudo ECR_REGISTRY=${{ env.ECR_REGISTRY }} \
+               ECR_REPOSITORY=${{ env.ECR_REPOSITORY }} \
+               IMAGE_TAG=${{ env.IMAGE_TAG }} \
+               docker compose -f docker-compose.prod.yml down --remove-orphans || true
+
+          sudo docker image prune -f
+
+          sudo ECR_REGISTRY=${{ env.ECR_REGISTRY }} \
+               ECR_REPOSITORY=${{ env.ECR_REPOSITORY }} \
+               IMAGE_TAG=${{ env.IMAGE_TAG }} \
+               docker compose -f docker-compose.prod.yml up -d
+
+          sleep 5
+          sudo docker logs --tail 20 $(sudo docker ps -q --filter name=web)
