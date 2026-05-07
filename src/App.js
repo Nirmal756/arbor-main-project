@@ -2,7 +2,6 @@ import React from 'react';
 import './App.css';
 
 function App() {
-  // These variables are baked in during the 'docker build' via your Build Args
   const bgColor = process.env.REACT_APP_COLOR || "#1e293b"; // Default dark slate
   const siteName = process.env.REACT_APP_NAME || "DevOps Portal";
   const envName = process.env.REACT_APP_ENV || "Production";
